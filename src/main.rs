@@ -11,6 +11,7 @@ use bevy::{
     input::mouse::{MouseScrollUnit, MouseWheel},
     prelude::*,
     window::PrimaryWindow,
+    winit::WinitSettings,
 };
 
 const CELL_WIDTH: f32 = 50.0;
@@ -22,6 +23,7 @@ const NUM_SEMIS: u8 = 120;
 fn main() -> AppExit {
     App::new()
         .add_plugins(DefaultPlugins)
+        .insert_resource(WinitSettings::desktop_app())
         .add_systems(Startup, setup)
         .add_systems(Update, scroll)
         .run()
