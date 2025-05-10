@@ -10,7 +10,7 @@ use std::{
 use bevy::{
     input::mouse::{MouseScrollUnit, MouseWheel},
     prelude::*,
-    window::PrimaryWindow,
+    window::{PrimaryWindow, WindowResized},
     winit::WinitSettings,
 };
 
@@ -25,7 +25,7 @@ fn main() -> AppExit {
         .add_plugins(DefaultPlugins)
         .insert_resource(WinitSettings::desktop_app())
         .add_systems(Startup, setup)
-        .add_systems(Update, scroll)
+        .add_systems(Update, (on_window_resize, scroll))
         .run()
 }
 
@@ -101,6 +101,15 @@ fn setup(
     }
 }
 
+fn on_window_resize(
+    mut evr: EventReader<WindowResized>,
+    mut cam: Single<&mut Transform, With<Camera>>,
+) {
+    for ev in evr.read() {
+        clamp_cam_pos(&mut cam.translation, Vec2::new(ev.width, ev.height));
+    }
+}
+
 fn scroll(
     mut mouse_wheel_evr: EventReader<MouseWheel>,
     kb: Res<ButtonInput<KeyCode>>,
@@ -115,10 +124,16 @@ fn scroll(
         if kb.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]) {
             mem::swap(&mut dx, &mut dy);
         }
-        cam.translation.x = (cam.translation.x - dx).max(window.size().x / 2.0);
-        cam.translation.y = (cam.translation.y + dy).clamp(
-            window.size().y / 2.0,
-            NUM_SEMIS as f32 * CELL_HEIGHT - window.size().y / 2.0,
-        );
+        cam.translation.x -= dx;
+        cam.translation.y += dy;
+        clamp_cam_pos(&mut cam.translation, window.size());
     }
+}
+
+fn clamp_cam_pos(pos: &mut Vec3, window_size: Vec2) {
+    pos.x = pos.x.max(window_size.x / 2.0);
+    pos.y = pos.y.clamp(
+        window_size.y / 2.0,
+        NUM_SEMIS as f32 * CELL_HEIGHT - window_size.y / 2.0,
+    );
 }
