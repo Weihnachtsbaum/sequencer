@@ -2,6 +2,8 @@
 #![register_tool(bevy)]
 #![cfg_attr(not(feature = "console"), windows_subsystem = "windows")]
 
+use std::fmt::{self, Display};
+
 use bevy::{prelude::*, window::PrimaryWindow};
 
 const CELL_WIDTH: f32 = 50.0;
@@ -14,6 +16,30 @@ fn main() -> AppExit {
         .add_plugins(DefaultPlugins)
         .add_systems(Startup, setup)
         .run()
+}
+
+struct Semi(u8);
+
+impl Display for Semi {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let letters = match self.0 % 12 {
+            0 => "C",
+            1 => "C#",
+            2 => "D",
+            3 => "D#",
+            4 => "E",
+            5 => "F",
+            6 => "F#",
+            7 => "G",
+            8 => "G#",
+            9 => "A",
+            10 => "A#",
+            11 => "B",
+            _ => unreachable!(),
+        };
+        let octave = self.0 / 12;
+        write!(f, "{letters}{octave}")
+    }
 }
 
 fn setup(
@@ -49,6 +75,15 @@ fn setup(
                 scale: Vec3::new(LINE_LEN, LINE_WIDTH, 1.0),
                 ..default()
             },
+        ));
+        let semi = y + y_cells / 2 + 10;
+        commands.spawn((
+            Text2d(Semi(semi as _).to_string()),
+            Transform::from_xyz(
+                window.size().x / -2.0 + 20.0,
+                (y as f32 + 0.5) * CELL_HEIGHT,
+                1.0,
+            ),
         ));
     }
 }
