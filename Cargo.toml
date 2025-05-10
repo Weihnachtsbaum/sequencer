@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 bevy = { version = "0.16", default-features = false, features = [
     "async_executor",
+    "bevy_audio",
     "bevy_core_pipeline",
     "bevy_log",
     "bevy_sprite",

@@ -3,11 +3,14 @@
 #![cfg_attr(not(feature = "console"), windows_subsystem = "windows")]
 
 use std::{
+    f32::consts::TAU,
     fmt::{self, Display},
     mem,
+    time::Duration,
 };
 
 use bevy::{
+    audio::{AddAudioSource, Source},
     input::{
         common_conditions::input_just_pressed,
         mouse::{MouseScrollUnit, MouseWheel},
@@ -27,6 +30,7 @@ fn main() -> AppExit {
     App::new()
         .add_plugins(DefaultPlugins)
         .insert_resource(WinitSettings::desktop_app())
+        .add_audio_source::<Track>()
         .add_systems(Startup, setup)
         .add_systems(
             Update,
@@ -34,6 +38,7 @@ fn main() -> AppExit {
                 on_window_resize,
                 scroll,
                 place_note.run_if(input_just_pressed(MouseButton::Left)),
+                play.run_if(input_just_pressed(KeyCode::Space)),
             ),
         )
         .run()
@@ -51,6 +56,7 @@ struct LineMaterial(Handle<ColorMaterial>);
 #[derive(Resource)]
 struct NoteMaterial(Handle<ColorMaterial>);
 
+#[derive(Clone)]
 struct Semi(u8);
 
 impl Display for Semi {
@@ -75,10 +81,86 @@ impl Display for Semi {
     }
 }
 
+impl Semi {
+    const A4: Self = Self(57);
+    const A4_HZ: f32 = 440.0;
+
+    /// Returns the frequency of the semitone in
+    /// [12-tone equal temperament](https://en.wikipedia.org/wiki/12_equal_temperament).
+    fn hz(&self) -> f32 {
+        let diff = self.0 as i32 - Self::A4.0 as i32;
+        Self::A4_HZ * 2.0f32.powf(1.0 / 12.0).powi(diff)
+    }
+}
+
+#[derive(Resource)]
+struct TrackHandle(Handle<Track>);
+
+#[derive(Asset, TypePath, Default)]
+struct Track(Vec<Vec<Semi>>);
+
+impl Decodable for Track {
+    type Decoder = TrackDecoder;
+    type DecoderItem = <Self::Decoder as Iterator>::Item;
+
+    fn decoder(&self) -> Self::Decoder {
+        TrackDecoder {
+            notes: self.0.clone(),
+            bpm: 120.0,
+            sample: 0,
+        }
+    }
+}
+
+struct TrackDecoder {
+    notes: Vec<Vec<Semi>>,
+    bpm: f32,
+    sample: u32,
+}
+
+impl Iterator for TrackDecoder {
+    type Item = f32;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let bps = self.bpm / 60.0;
+        let sec = self.sample as f32 / self.sample_rate() as f32;
+        let x = (bps * sec) as usize;
+        let v = self
+            .notes
+            .get(x)?
+            .iter()
+            .map(|semi| (semi.hz() * TAU * sec).sin())
+            .sum();
+        self.sample += 1;
+        Some(v)
+    }
+}
+
+impl Source for TrackDecoder {
+    fn current_frame_len(&self) -> Option<usize> {
+        None
+    }
+
+    fn channels(&self) -> u16 {
+        1
+    }
+
+    fn sample_rate(&self) -> u32 {
+        41100
+    }
+
+    fn total_duration(&self) -> Option<Duration> {
+        Some(Duration::from_secs_f32(
+            self.bpm / 60.0 * self.notes.len() as f32,
+        ))
+    }
+}
+
 fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
+    mut tracks: ResMut<Assets<Track>>,
     window: Single<&Window, With<PrimaryWindow>>,
 ) {
     commands.spawn((
@@ -126,6 +208,8 @@ fn setup(
     }
 
     commands.insert_resource(NoteMaterial(materials.add(Color::srgb(0.7, 0.2, 0.4))));
+
+    commands.insert_resource(TrackHandle(tracks.add(Track::default())));
 }
 
 fn on_window_resize(
@@ -200,19 +284,33 @@ fn place_note(
     mut commands: Commands,
     mesh: Res<RectMesh>,
     material: Res<NoteMaterial>,
+    track: Res<TrackHandle>,
+    mut tracks: ResMut<Assets<Track>>,
 ) -> Result {
     let pos = window.cursor_position().ok_or("No cursor pos")?;
     let (cam, cam_transform) = *cam;
     let pos = cam.viewport_to_world_2d(cam_transform, pos)?;
     let scale = Vec2::new(CELL_WIDTH, CELL_HEIGHT);
+    let grid_pos = (pos / scale).floor();
     commands.spawn((
         Mesh2d(mesh.0.clone()),
         MeshMaterial2d(material.0.clone()),
         Transform {
-            translation: (((pos / scale).floor() + Vec2::splat(0.5)) * scale).extend(-1.0),
+            translation: ((grid_pos + Vec2::splat(0.5)) * scale).extend(-1.0),
             scale: scale.extend(1.0),
             ..default()
         },
     ));
+    let x = grid_pos.x as usize - 1;
+    let semi = Semi(grid_pos.y as u8);
+    let track = tracks.get_mut(track.0.id()).ok_or("No track")?;
+    if track.0.len() <= x {
+        track.0.resize_with(x + 1, Default::default);
+    }
+    track.0[x].push(semi);
     Ok(())
+}
+
+fn play(mut commands: Commands, track: Res<TrackHandle>) {
+    commands.spawn((AudioPlayer(track.0.clone()), PlaybackSettings::DESPAWN));
 }
