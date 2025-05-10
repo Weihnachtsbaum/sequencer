@@ -61,7 +61,6 @@ fn setup(
     let mesh = Mesh2d(meshes.add(Rectangle::default()));
     let material = MeshMaterial2d(materials.add(Color::BLACK));
     let x_cells = (window.size().x / CELL_WIDTH) as i32;
-    let y_cells = (window.size().y / CELL_HEIGHT) as i32;
 
     for x in -x_cells / 2 - 1..x_cells / 2 + 1 {
         commands.spawn((
@@ -74,22 +73,22 @@ fn setup(
             },
         ));
     }
-    for y in -y_cells / 2 - 1..y_cells / 2 + 1 {
+    for semi in 0..120 {
+        let line_y = (semi as i16 - 60) as f32 * CELL_HEIGHT;
         commands.spawn((
             mesh.clone(),
             material.clone(),
             Transform {
-                translation: Vec3::new(0.0, y as f32 * CELL_HEIGHT, 0.0),
+                translation: Vec3::new(0.0, line_y, 0.0),
                 scale: Vec3::new(LINE_LEN, LINE_WIDTH, 1.0),
                 ..default()
             },
         ));
-        let semi = y + y_cells / 2 + 10;
         commands.spawn((
-            Text2d(Semi(semi as _).to_string()),
+            Text2d(Semi(semi).to_string()),
             Transform::from_xyz(
                 window.size().x / -2.0 + 20.0,
-                (y as f32 + 0.5) * CELL_HEIGHT,
+                line_y + 0.5 * CELL_HEIGHT,
                 1.0,
             ),
         ));
