@@ -15,6 +15,7 @@ use bevy::{
         common_conditions::input_just_pressed,
         mouse::{MouseScrollUnit, MouseWheel},
     },
+    platform::collections::HashMap,
     prelude::*,
     window::{PrimaryWindow, WindowResized},
     winit::WinitSettings,
@@ -56,7 +57,7 @@ struct LineMaterial(Handle<ColorMaterial>);
 #[derive(Resource)]
 struct NoteMaterial(Handle<ColorMaterial>);
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 struct Semi(u8);
 
 impl Display for Semi {
@@ -97,7 +98,7 @@ impl Semi {
 struct TrackHandle(Handle<Track>);
 
 #[derive(Asset, TypePath, Default)]
-struct Track(Vec<Vec<Semi>>);
+struct Track(Vec<HashMap<Semi, Entity>>);
 
 impl Decodable for Track {
     type Decoder = TrackDecoder;
@@ -113,7 +114,7 @@ impl Decodable for Track {
 }
 
 struct TrackDecoder {
-    notes: Vec<Vec<Semi>>,
+    notes: Vec<HashMap<Semi, Entity>>,
     bpm: f32,
     sample: u32,
 }
@@ -129,7 +130,7 @@ impl Iterator for TrackDecoder {
             .notes
             .get(x)?
             .iter()
-            .map(|semi| (semi.hz() * TAU * sec).sin())
+            .map(|(semi, _)| (semi.hz() * TAU * sec).sin())
             .sum();
         self.sample += 1;
         Some(v)
@@ -295,22 +296,29 @@ fn place_note(
     if grid_pos.x < 1.0 {
         return Ok(());
     }
-    commands.spawn((
-        Mesh2d(mesh.0.clone()),
-        MeshMaterial2d(material.0.clone()),
-        Transform {
-            translation: ((grid_pos + Vec2::splat(0.5)) * scale).extend(-1.0),
-            scale: scale.extend(1.0),
-            ..default()
-        },
-    ));
     let x = grid_pos.x as usize - 1;
     let semi = Semi(grid_pos.y as u8);
     let track = tracks.get_mut(track.0.id()).ok_or("No track")?;
-    if track.0.len() <= x {
+    if track.0.len() > x {
+        if let Some(e) = track.0[x].remove(&semi) {
+            commands.entity(e).despawn();
+            return Ok(());
+        }
+    } else {
         track.0.resize_with(x + 1, Default::default);
     }
-    track.0[x].push(semi);
+    let id = commands
+        .spawn((
+            Mesh2d(mesh.0.clone()),
+            MeshMaterial2d(material.0.clone()),
+            Transform {
+                translation: ((grid_pos + Vec2::splat(0.5)) * scale).extend(-1.0),
+                scale: scale.extend(1.0),
+                ..default()
+            },
+        ))
+        .id();
+    track.0[x].insert(semi, id);
     Ok(())
 }
 
