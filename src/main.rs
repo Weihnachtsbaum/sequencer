@@ -4,7 +4,11 @@
 
 use std::fmt::{self, Display};
 
-use bevy::{prelude::*, window::PrimaryWindow};
+use bevy::{
+    input::mouse::{MouseScrollUnit, MouseWheel},
+    prelude::*,
+    window::PrimaryWindow,
+};
 
 const CELL_WIDTH: f32 = 50.0;
 const CELL_HEIGHT: f32 = 25.0;
@@ -15,6 +19,7 @@ fn main() -> AppExit {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_systems(Startup, setup)
+        .add_systems(Update, scroll)
         .run()
 }
 
@@ -85,5 +90,17 @@ fn setup(
                 1.0,
             ),
         ));
+    }
+}
+
+fn scroll(
+    mut mouse_wheel_evr: EventReader<MouseWheel>,
+    mut cam: Single<&mut Transform, With<Camera>>,
+) {
+    for ev in mouse_wheel_evr.read() {
+        cam.translation.y += match ev.unit {
+            MouseScrollUnit::Line => ev.y * CELL_HEIGHT,
+            MouseScrollUnit::Pixel => ev.y,
+        };
     }
 }
