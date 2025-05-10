@@ -17,6 +17,7 @@ const CELL_WIDTH: f32 = 50.0;
 const CELL_HEIGHT: f32 = 25.0;
 const LINE_WIDTH: f32 = 1.0;
 const LINE_LEN: f32 = 10000.0;
+const NUM_SEMIS: u8 = 120;
 
 fn main() -> AppExit {
     App::new()
@@ -56,13 +57,20 @@ fn setup(
     mut materials: ResMut<Assets<ColorMaterial>>,
     window: Single<&Window, With<PrimaryWindow>>,
 ) {
-    commands.spawn(Camera2d);
+    commands.spawn((
+        Camera2d,
+        Transform::from_xyz(
+            window.size().x / 2.0,
+            NUM_SEMIS as f32 * CELL_HEIGHT / 2.0,
+            0.0,
+        ),
+    ));
 
     let mesh = Mesh2d(meshes.add(Rectangle::default()));
     let material = MeshMaterial2d(materials.add(Color::BLACK));
     let x_cells = (window.size().x / CELL_WIDTH) as i32;
 
-    for x in -x_cells / 2 - 1..x_cells / 2 + 1 {
+    for x in 1..x_cells + 1 {
         commands.spawn((
             mesh.clone(),
             material.clone(),
@@ -73,8 +81,8 @@ fn setup(
             },
         ));
     }
-    for semi in 0..120 {
-        let line_y = (semi as i16 - 60) as f32 * CELL_HEIGHT;
+    for semi in 0..NUM_SEMIS {
+        let line_y = semi as f32 * CELL_HEIGHT;
         commands.spawn((
             mesh.clone(),
             material.clone(),
@@ -86,11 +94,7 @@ fn setup(
         ));
         commands.spawn((
             Text2d(Semi(semi).to_string()),
-            Transform::from_xyz(
-                window.size().x / -2.0 + 20.0,
-                line_y + 0.5 * CELL_HEIGHT,
-                1.0,
-            ),
+            Transform::from_xyz(20.0, line_y + 0.5 * CELL_HEIGHT, 1.0),
         ));
     }
 }
@@ -99,6 +103,7 @@ fn scroll(
     mut mouse_wheel_evr: EventReader<MouseWheel>,
     kb: Res<ButtonInput<KeyCode>>,
     mut cam: Single<&mut Transform, With<Camera>>,
+    window: Single<&Window, With<PrimaryWindow>>,
 ) {
     for ev in mouse_wheel_evr.read() {
         let (mut dx, mut dy) = match ev.unit {
@@ -108,7 +113,10 @@ fn scroll(
         if kb.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]) {
             mem::swap(&mut dx, &mut dy);
         }
-        cam.translation.x -= dx;
-        cam.translation.y += dy;
+        cam.translation.x = (cam.translation.x - dx).max(window.size().x / 2.0);
+        cam.translation.y = (cam.translation.y + dy).clamp(
+            window.size().y / 2.0,
+            NUM_SEMIS as f32 * CELL_HEIGHT - window.size().y / 2.0,
+        );
     }
 }
