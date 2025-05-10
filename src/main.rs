@@ -29,6 +29,15 @@ fn main() -> AppExit {
         .run()
 }
 
+#[derive(Resource)]
+struct ColumnCount(u32);
+
+#[derive(Resource)]
+struct LineMesh(Handle<Mesh>);
+
+#[derive(Resource)]
+struct LineMaterial(Handle<ColorMaterial>);
+
 struct Semi(u8);
 
 impl Display for Semi {
@@ -69,8 +78,11 @@ fn setup(
     ));
 
     let mesh = Mesh2d(meshes.add(Rectangle::default()));
+    commands.insert_resource(LineMesh(mesh.0.clone()));
     let material = MeshMaterial2d(materials.add(Color::BLACK));
-    let x_cells = (window.size().x / CELL_WIDTH) as i32;
+    commands.insert_resource(LineMaterial(material.0.clone()));
+    let x_cells = (window.size().x / CELL_WIDTH) as u32;
+    commands.insert_resource(ColumnCount(x_cells));
 
     for x in 1..x_cells + 1 {
         commands.spawn((
@@ -104,9 +116,11 @@ fn setup(
 fn on_window_resize(
     mut evr: EventReader<WindowResized>,
     mut cam: Single<&mut Transform, With<Camera>>,
+    mut commands: Commands,
 ) {
     for ev in evr.read() {
         clamp_cam_pos(&mut cam.translation, Vec2::new(ev.width, ev.height));
+        commands.run_system_cached(update_column_count);
     }
 }
 
@@ -115,6 +129,7 @@ fn scroll(
     kb: Res<ButtonInput<KeyCode>>,
     mut cam: Single<&mut Transform, With<Camera>>,
     window: Single<&Window, With<PrimaryWindow>>,
+    mut commands: Commands,
 ) {
     for ev in mouse_wheel_evr.read() {
         let (mut dx, mut dy) = match ev.unit {
@@ -127,6 +142,7 @@ fn scroll(
         cam.translation.x -= dx;
         cam.translation.y += dy;
         clamp_cam_pos(&mut cam.translation, window.size());
+        commands.run_system_cached(update_column_count);
     }
 }
 
@@ -136,4 +152,29 @@ fn clamp_cam_pos(pos: &mut Vec3, window_size: Vec2) {
         window_size.y / 2.0,
         NUM_SEMIS as f32 * CELL_HEIGHT - window_size.y / 2.0,
     );
+}
+
+fn update_column_count(
+    mut column_count: ResMut<ColumnCount>,
+    cam: Single<&Transform, With<Camera>>,
+    window: Single<&Window, With<PrimaryWindow>>,
+    mut commands: Commands,
+    line_mesh: Res<LineMesh>,
+    line_material: Res<LineMaterial>,
+) {
+    let new_count = ((cam.translation.x + window.size().x / 2.0) / CELL_WIDTH) as u32;
+    for x in column_count.0 + 1..new_count + 1 {
+        commands.spawn((
+            Mesh2d(line_mesh.0.clone()),
+            MeshMaterial2d(line_material.0.clone()),
+            Transform {
+                translation: Vec3::new(x as f32 * CELL_WIDTH, 0.0, 0.0),
+                scale: Vec3::new(LINE_WIDTH, LINE_LEN, 1.0),
+                ..default()
+            },
+        ));
+    }
+    if new_count > column_count.0 {
+        column_count.0 = new_count;
+    }
 }
