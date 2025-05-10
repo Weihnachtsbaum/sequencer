@@ -8,7 +8,10 @@ use std::{
 };
 
 use bevy::{
-    input::mouse::{MouseScrollUnit, MouseWheel},
+    input::{
+        common_conditions::input_just_pressed,
+        mouse::{MouseScrollUnit, MouseWheel},
+    },
     prelude::*,
     window::{PrimaryWindow, WindowResized},
     winit::WinitSettings,
@@ -25,7 +28,14 @@ fn main() -> AppExit {
         .add_plugins(DefaultPlugins)
         .insert_resource(WinitSettings::desktop_app())
         .add_systems(Startup, setup)
-        .add_systems(Update, (on_window_resize, scroll))
+        .add_systems(
+            Update,
+            (
+                on_window_resize,
+                scroll,
+                place_note.run_if(input_just_pressed(MouseButton::Left)),
+            ),
+        )
         .run()
 }
 
@@ -33,10 +43,13 @@ fn main() -> AppExit {
 struct ColumnCount(u32);
 
 #[derive(Resource)]
-struct LineMesh(Handle<Mesh>);
+struct RectMesh(Handle<Mesh>);
 
 #[derive(Resource)]
 struct LineMaterial(Handle<ColorMaterial>);
+
+#[derive(Resource)]
+struct NoteMaterial(Handle<ColorMaterial>);
 
 struct Semi(u8);
 
@@ -78,7 +91,7 @@ fn setup(
     ));
 
     let mesh = Mesh2d(meshes.add(Rectangle::default()));
-    commands.insert_resource(LineMesh(mesh.0.clone()));
+    commands.insert_resource(RectMesh(mesh.0.clone()));
     let material = MeshMaterial2d(materials.add(Color::BLACK));
     commands.insert_resource(LineMaterial(material.0.clone()));
     let x_cells = (window.size().x / CELL_WIDTH) as u32;
@@ -111,6 +124,8 @@ fn setup(
             Transform::from_xyz(20.0, line_y + 0.5 * CELL_HEIGHT, 1.0),
         ));
     }
+
+    commands.insert_resource(NoteMaterial(materials.add(Color::srgb(0.7, 0.2, 0.4))));
 }
 
 fn on_window_resize(
@@ -159,7 +174,7 @@ fn update_column_count(
     cam: Single<&Transform, With<Camera>>,
     window: Single<&Window, With<PrimaryWindow>>,
     mut commands: Commands,
-    line_mesh: Res<LineMesh>,
+    line_mesh: Res<RectMesh>,
     line_material: Res<LineMaterial>,
 ) {
     let new_count = ((cam.translation.x + window.size().x / 2.0) / CELL_WIDTH) as u32;
@@ -177,4 +192,27 @@ fn update_column_count(
     if new_count > column_count.0 {
         column_count.0 = new_count;
     }
+}
+
+fn place_note(
+    window: Single<&Window, With<PrimaryWindow>>,
+    cam: Single<(&Camera, &GlobalTransform)>,
+    mut commands: Commands,
+    mesh: Res<RectMesh>,
+    material: Res<NoteMaterial>,
+) -> Result {
+    let pos = window.cursor_position().ok_or("No cursor pos")?;
+    let (cam, cam_transform) = *cam;
+    let pos = cam.viewport_to_world_2d(cam_transform, pos)?;
+    let scale = Vec2::new(CELL_WIDTH, CELL_HEIGHT);
+    commands.spawn((
+        Mesh2d(mesh.0.clone()),
+        MeshMaterial2d(material.0.clone()),
+        Transform {
+            translation: (((pos / scale).floor() + Vec2::splat(0.5)) * scale).extend(-1.0),
+            scale: scale.extend(1.0),
+            ..default()
+        },
+    ));
+    Ok(())
 }
