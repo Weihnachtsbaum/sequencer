@@ -8,6 +8,7 @@ bevy = { version = "0.16", default-features = false, features = [
     "async_executor",
     "bevy_core_pipeline",
     "bevy_log",
+    "bevy_sprite",
     "bevy_winit",
     "multi_threaded",
     "std",
