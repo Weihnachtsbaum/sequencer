@@ -292,6 +292,9 @@ fn place_note(
     let pos = cam.viewport_to_world_2d(cam_transform, pos)?;
     let scale = Vec2::new(CELL_WIDTH, CELL_HEIGHT);
     let grid_pos = (pos / scale).floor();
+    if grid_pos.x < 1.0 {
+        return Ok(());
+    }
     commands.spawn((
         Mesh2d(mesh.0.clone()),
         MeshMaterial2d(material.0.clone()),
