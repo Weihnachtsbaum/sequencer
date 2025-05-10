@@ -2,7 +2,10 @@
 #![register_tool(bevy)]
 #![cfg_attr(not(feature = "console"), windows_subsystem = "windows")]
 
-use std::fmt::{self, Display};
+use std::{
+    fmt::{self, Display},
+    mem,
+};
 
 use bevy::{
     input::mouse::{MouseScrollUnit, MouseWheel},
@@ -95,12 +98,18 @@ fn setup(
 
 fn scroll(
     mut mouse_wheel_evr: EventReader<MouseWheel>,
+    kb: Res<ButtonInput<KeyCode>>,
     mut cam: Single<&mut Transform, With<Camera>>,
 ) {
     for ev in mouse_wheel_evr.read() {
-        cam.translation.y += match ev.unit {
-            MouseScrollUnit::Line => ev.y * CELL_HEIGHT,
-            MouseScrollUnit::Pixel => ev.y,
+        let (mut dx, mut dy) = match ev.unit {
+            MouseScrollUnit::Line => (ev.x * CELL_HEIGHT, ev.y * CELL_HEIGHT),
+            MouseScrollUnit::Pixel => (ev.x, ev.y),
         };
+        if kb.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]) {
+            mem::swap(&mut dx, &mut dy);
+        }
+        cam.translation.x -= dx;
+        cam.translation.y += dy;
     }
 }
