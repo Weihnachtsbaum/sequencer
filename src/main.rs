@@ -25,7 +25,7 @@ use bevy::{
 const CELL_WIDTH: f32 = 50.0;
 const CELL_HEIGHT: f32 = 25.0;
 const LINE_WIDTH: f32 = 1.0;
-const LINE_LEN: f32 = 10000.0;
+const LINE_LEN: f32 = 1000000.0;
 const NUM_SEMIS: u8 = 120;
 const BPM: f32 = 120.0;
 
