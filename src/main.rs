@@ -6,6 +6,7 @@ use std::{
     f32::consts::TAU,
     fmt::{self, Display},
     mem,
+    sync::{Arc, Mutex},
     time::Duration,
 };
 
@@ -102,8 +103,10 @@ impl Semi {
 #[derive(Resource)]
 struct TrackHandle(Handle<Track>);
 
+// TODO: Use a non-blocking data structure, see
+// http://tesselo.de/articles/audio-libraries-considered-challenging
 #[derive(Asset, TypePath, Default)]
-struct Track(Vec<HashMap<Semi, Entity>>);
+struct Track(Arc<Mutex<Vec<HashMap<Semi, Entity>>>>);
 
 impl Decodable for Track {
     type Decoder = TrackDecoder;
@@ -111,7 +114,7 @@ impl Decodable for Track {
 
     fn decoder(&self) -> Self::Decoder {
         TrackDecoder {
-            notes: self.0.clone(),
+            notes: Arc::clone(&self.0),
             bpm: BPM,
             sample: 0,
         }
@@ -119,7 +122,7 @@ impl Decodable for Track {
 }
 
 struct TrackDecoder {
-    notes: Vec<HashMap<Semi, Entity>>,
+    notes: Arc<Mutex<Vec<HashMap<Semi, Entity>>>>,
     bpm: f32,
     sample: u32,
 }
@@ -133,6 +136,8 @@ impl Iterator for TrackDecoder {
         let x = (bps * sec) as usize;
         let v = self
             .notes
+            .lock()
+            .unwrap()
             .get(x)?
             .iter()
             .map(|(semi, _)| (semi.hz() * TAU * sec).sin())
@@ -157,7 +162,7 @@ impl Source for TrackDecoder {
 
     fn total_duration(&self) -> Option<Duration> {
         Some(Duration::from_secs_f32(
-            self.bpm / 60.0 * self.notes.len() as f32,
+            self.bpm / 60.0 * self.notes.lock().unwrap().len() as f32,
         ))
     }
 }
@@ -305,14 +310,19 @@ fn place_note(
     }
     let x = grid_pos.x as usize - 1;
     let semi = Semi(grid_pos.y as u8);
-    let track = tracks.get_mut(track.0.id()).ok_or("No track")?;
-    if track.0.len() > x {
-        if let Some(e) = track.0[x].remove(&semi) {
+    let mut track = tracks
+        .get_mut(track.0.id())
+        .ok_or("No track")?
+        .0
+        .lock()
+        .unwrap();
+    if track.len() > x {
+        if let Some(e) = track[x].remove(&semi) {
             commands.entity(e).despawn();
             return Ok(());
         }
     } else {
-        track.0.resize_with(x + 1, Default::default);
+        track.resize_with(x + 1, Default::default);
     }
     let id = commands
         .spawn((
@@ -325,7 +335,7 @@ fn place_note(
             },
         ))
         .id();
-    track.0[x].insert(semi, id);
+    track[x].insert(semi, id);
     Ok(())
 }
 
