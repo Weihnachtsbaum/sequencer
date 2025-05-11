@@ -17,7 +17,7 @@ use bevy::{
     },
     platform::collections::HashMap,
     prelude::*,
-    window::{PrimaryWindow, WindowResized},
+    window::{PrimaryWindow, RequestRedraw, WindowResized},
     winit::WinitSettings,
 };
 
@@ -26,6 +26,7 @@ const CELL_HEIGHT: f32 = 25.0;
 const LINE_WIDTH: f32 = 1.0;
 const LINE_LEN: f32 = 10000.0;
 const NUM_SEMIS: u8 = 120;
+const BPM: f32 = 120.0;
 
 fn main() -> AppExit {
     App::new()
@@ -40,6 +41,7 @@ fn main() -> AppExit {
                 scroll,
                 place_note.run_if(input_just_pressed(MouseButton::Left)),
                 toggle_play.run_if(input_just_pressed(KeyCode::Space)),
+                update_progress_bar,
             ),
         )
         .run()
@@ -56,6 +58,9 @@ struct LineMaterial(Handle<ColorMaterial>);
 
 #[derive(Resource)]
 struct NoteMaterial(Handle<ColorMaterial>);
+
+#[derive(Resource)]
+struct ProgressBarMaterial(Handle<ColorMaterial>);
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 struct Semi(u8);
@@ -107,7 +112,7 @@ impl Decodable for Track {
     fn decoder(&self) -> Self::Decoder {
         TrackDecoder {
             notes: self.0.clone(),
-            bpm: 120.0,
+            bpm: BPM,
             sample: 0,
         }
     }
@@ -209,7 +214,9 @@ fn setup(
     }
 
     commands.insert_resource(NoteMaterial(materials.add(Color::srgb(0.7, 0.2, 0.4))));
-
+    commands.insert_resource(ProgressBarMaterial(
+        materials.add(Color::srgb(1.0, 0.3, 0.0)),
+    ));
     commands.insert_resource(TrackHandle(tracks.add(Track::default())));
 }
 
@@ -322,12 +329,37 @@ fn place_note(
     Ok(())
 }
 
-fn toggle_play(q: Query<Entity, With<AudioSink>>, mut commands: Commands, track: Res<TrackHandle>) {
+fn toggle_play(
+    q: Query<Entity, With<AudioSink>>,
+    mut commands: Commands,
+    track: Res<TrackHandle>,
+    mesh: Res<RectMesh>,
+    material: Res<ProgressBarMaterial>,
+) {
     if q.iter().len() == 0 {
-        commands.spawn((AudioPlayer(track.0.clone()), PlaybackSettings::DESPAWN));
+        commands.spawn((
+            AudioPlayer(track.0.clone()),
+            PlaybackSettings::DESPAWN,
+            Mesh2d(mesh.0.clone()),
+            MeshMaterial2d(material.0.clone()),
+            Transform {
+                translation: Vec3::new(CELL_WIDTH, 0.0, 1.0),
+                scale: Vec3::new(LINE_WIDTH, LINE_LEN, 1.0),
+                ..default()
+            },
+        ));
         return;
     }
     for e in q {
         commands.entity(e).despawn();
     }
+}
+
+fn update_progress_bar(
+    mut transform: Single<&mut Transform, With<AudioSink>>,
+    time: Res<Time>,
+    mut redraw_evw: EventWriter<RequestRedraw>,
+) {
+    transform.translation.x += time.delta_secs() * CELL_WIDTH * BPM / 60.0;
+    redraw_evw.write(RequestRedraw);
 }
