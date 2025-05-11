@@ -39,7 +39,7 @@ fn main() -> AppExit {
                 on_window_resize,
                 scroll,
                 place_note.run_if(input_just_pressed(MouseButton::Left)),
-                play.run_if(input_just_pressed(KeyCode::Space)),
+                toggle_play.run_if(input_just_pressed(KeyCode::Space)),
             ),
         )
         .run()
@@ -322,6 +322,12 @@ fn place_note(
     Ok(())
 }
 
-fn play(mut commands: Commands, track: Res<TrackHandle>) {
-    commands.spawn((AudioPlayer(track.0.clone()), PlaybackSettings::DESPAWN));
+fn toggle_play(q: Query<Entity, With<AudioSink>>, mut commands: Commands, track: Res<TrackHandle>) {
+    if q.iter().len() == 0 {
+        commands.spawn((AudioPlayer(track.0.clone()), PlaybackSettings::DESPAWN));
+        return;
+    }
+    for e in q {
+        commands.entity(e).despawn();
+    }
 }
